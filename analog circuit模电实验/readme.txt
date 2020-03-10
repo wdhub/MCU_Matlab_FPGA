@@ -8,8 +8,16 @@
 	直流稳压电源
  
 Environment:	Multisim 12.0
-Description:	Analog circuits designed in the experiments
+Description:	Analog circuits designed in experiments
 Menu:
+	amplifier based on a single transistor
+	operational amplifier
+	differential amplifier
+	comparator
+	sinusoidal oscillator
+	DC power supply
+	
+	
 	
 
 	
