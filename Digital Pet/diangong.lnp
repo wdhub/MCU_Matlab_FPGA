@@ -1,0 +1,5 @@
+"lcd1602.obj",
+"main.obj",
+"delay.obj" 
+TO "diangong" 
+RAMSIZE(256) 

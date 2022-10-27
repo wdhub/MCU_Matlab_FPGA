@@ -1,0 +1,502 @@
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include        "stc15f2k60s2.h"            // 单片机STC15F2K60S2头文件
+   2          #include        <intrins.h>                         // 加入此头文件后,可使用_nop_库函数
+   3          #include        "delay.h"                       // 延时函数头文件
+   4          #include        "lcd1602.h"     
+   5          #include        <math.h>                  // 1602显示屏驱动程序头文件
+   6          #include        <stdlib.h>              
+   7          #define         uchar unsigned char 
+   8          #define         uchar unsigned char  
+   9          #define         uint unsigned int 
+  10          
+  11          void    Uart_Init       (void);
+  12          void    SendData        (uchar dat);
+  13          void    receiveData     (void);
+  14          void    ADC_init        (void);
+  15          void    InitTimer0      (void);//定时器0初始化
+  16          void    Delay1ms        (void);
+  17          void    DelayMS         (int    t);
+  18          uint    Read_value(void);//读值函数
+  19          void    timer1_initial();
+  20          void    duobi           (void);
+  21          void    motor_zc        (void);
+  22          void    motor_tz        (void);
+  23          void    motor_zz        (void);
+  24          void    motor_yz        (void);
+  25          sbit    en1=P1^0;  /* L298的Enable A */  
+  26          sbit    en2=P1^1;  /* L298的Enable B */  
+  27          sbit    s1=P2^3;  /* L298的Input 1 */  
+  28          sbit    s2=P2^4;  /* L298的Input 2 */  
+  29          sbit    s3=P2^5;  /* L298的Input 3 */  
+  30          sbit    s4=P2^6;  /* L298的Input 4 */
+  31          sfr             ADC_LOW2=0xBE;
+  32                    
+  33          uchar   t=0;   /* 中断计数器 */  
+  34          uchar   m1=0;   /* 电机1速度值 */  
+  35          uchar   m2=0;   /* 电机2速度值 */  
+  36          uchar   tmp1,tmp2; /* 电机当前速度值 */     
+  37          char    i;  
+  38          char    a;  
+  39          sbit    bf=P1^7;
+  40          sbit    zd=P1^6;
+  41          sbit    tr              =       P1^2;   //trigger of detector
+  42          sbit    ec              =       P1^3;   //echo of detector
+  43          uint    distance;
+  44          uint    r; 
+  45          int             adc_temp;
+  46          uchar   age;
+  47                          
+  48          //========================================================================
+  49          // 函数: void SYS_Init(void)
+  50          // 描述: 单片机端口初始化
+  51          // 说明：STC15W4K32S4系列单片机，在上电后与PWM相关的IO为高阻状态，需手动设置为普通双向IO
+  52          // PWM相关IO为 : P0.6/P0.7/P1.6/P1.7/P2.1/P2.2
+  53          //               P2.3/P2.7/P3.7/P4.2/P4.4/P4.5                                           
+  54          //========================================================================
+  55          void SYS_Init()
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 2   
+
+  56          {
+  57   1              P0M0=0x20;
+  58   1              P0M1=0x20;
+  59   1              P1M0=0x3C;
+  60   1              P1M1=0x3C;
+  61   1              P2M0=0x00;
+  62   1              P2M1=0x00;
+  63   1              P3M0=0x00;
+  64   1              P3M1=0x00;
+  65   1              P4M0=0x00;
+  66   1              P4M1=0x00;
+  67   1              P5M0=0x00;
+  68   1              P5M1=0x00;      
+  69   1      }
+  70          
+  71          /* 电机控制函数 index-电机号(1,2); speed-电机速度(-100—100) */  
+  72          void motor(uchar index, char speed)  
+  73          {  
+  74   1              if(speed>=-100 && speed<=100)  
+  75   1              {  
+  76   2                      if(index==1) /* 电机1的处理 */  
+  77   2                      {  
+  78   3                              m1=abs(speed); /* 取速度的绝对值 */  
+  79   3                              if(speed<0) /* 速度值为负则反转 */  
+  80   3                              {  
+  81   4                              s1=0;  
+  82   4                              s2=1;  
+  83   4                              }  
+  84   3                              else /* 不为负数则正转 */  
+  85   3                              {  
+  86   4                              s1=1;  
+  87   4                              s2=0;  
+  88   4                              }  
+  89   3                      }  
+  90   2                      if(index==2) /* 电机2的处理 */  
+  91   2                      {         
+  92   3                              m2=abs(speed); /* 电机2的速度控制 */  
+  93   3                              if(speed<0) /* 电机2的方向控制 */  
+  94   3                              {  
+  95   4                              s3=0;  
+  96   4                              s4=1;  
+  97   4                              }  
+  98   3                              else  
+  99   3                              {  
+ 100   4                              s3=1;  
+ 101   4                              s4=0;  
+ 102   4                              }  
+ 103   3                      }  
+ 104   2              }  
+ 105   1      }  
+ 106          
+ 107          void delays(uint j) /* 简易延时函数 */  
+ 108          {  
+ 109   1      for(j;j>0;j--);  
+ 110   1      }  
+ 111          
+ 112          void    timer1_initial()
+ 113          {       
+ 114   1              //100us 
+ 115   1              AUXR &= 0xBF;           //定时器时钟12T模式
+ 116   1              TMOD &= 0x0F;           //设置定时器模式
+ 117   1              TMOD |= 0x20;           //设置定时器模式
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 3   
+
+ 118   1              TL1 = 0xA4;             //设置定时初值
+ 119   1              TH1 = 0xA4;             //设置定时重载值
+ 120   1              TF1 = 0;                //清除TF1标志
+ 121   1              TR1 = 1;                //定时器1开始计时
+ 122   1              EA=1; // 开中断   
+ 123   1              ET1=1; // 定时器1允许中断  
+ 124   1              //
+ 125   1      }
+ 126          
+ 127          //小车逃跑
+ 128          void    motor_zc()
+ 129          {
+ 130   1              char s=50;
+ 131   1              motor(1,s);
+ 132   1              motor(2,s);
+ 133   1      }
+ 134          
+ 135          //小车停止
+ 136          void    motor_tz()
+ 137          {
+ 138   1              s1=0;
+ 139   1              s2=0;           
+ 140   1              s3=0;
+ 141   1              s4=0;
+ 142   1      }
+ 143          
+ 144          //小车左转
+ 145          void    motor_zz()
+ 146          {
+ 147   1              char s=50;
+ 148   1              motor(1,s);  
+ 149   1              s3=0;
+ 150   1              s4=0;
+ 151   1      }
+ 152          
+ 153          //小车右转
+ 154          void    motor_yz()
+ 155          {
+ 156   1              char s=50;
+ 157   1              s1=0;
+ 158   1              s2=0;
+ 159   1              motor(2,s);  
+ 160   1      }
+ 161          
+ 162          
+ 163          void    lcd_tp()
+ 164          {
+ 165   1              lcd_clear();                        // 清屏
+ 166   1              DelayMS(5);                             
+ 167   1              lcd_write_string(0,0,"   >     <   ");
+ 168   1              lcd_write_string(0,1,"      _      ");
+ 169   1      }
+ 170          
+ 171          void    lcd_kx()
+ 172          {       
+ 173   1              lcd_clear();                        // 清屏
+ 174   1              DelayMS(5);
+ 175   1              lcd_write_string(0,0,"   ^     ^   ");
+ 176   1              lcd_write_string(0,1,"      _      ");
+ 177   1      }
+ 178          
+ 179          void    lcd_cs()
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 4   
+
+ 180          {
+ 181   1              lcd_clear();                        // 清屏
+ 182   1              DelayMS(5);                             
+ 183   1              lcd_write_string(0,0,"    Welcome!    ");
+ 184   1              lcd_write_string(0,1,"Long time no see");
+ 185   1      }
+ 186          
+ 187          void    ADC_init()
+ 188          {
+ 189   1              unsigned int i;
+ 190   1          P1ASF=0x20;                         //设置P1.4为模拟量输入功能
+ 191   1          ADC_CONTR=0x84;                     //打开A/D转换电源，设置输入通道
+ 192   1          for(i=1000;i>0;i--);                //适当延时
+ 193   1          CLK_DIV|=0x20;                      //ADRJ=1.设置A/D转换结果的存储格式
+ 194   1          ADC_CONTR=0x8c;                     //启动A/D转换
+ 195   1              PADC=1;                                                         // 高优先级
+ 196   1          EA=1;
+ 197   1          EADC=1;
+ 198   1      }
+ 199          void ADC_ISR() interrupt 5      using 1
+ 200          {
+ 201   1              ADC_CONTR=0x84;                     //将ADC_FLAG清0；
+ 202   1          //P3=~P3;
+ 203   1              //internal of data
+ 204   1              //SendData(0);
+ 205   1              //SendData(0);                   
+ 206   1          ADC_CONTR=0x8c;                     //重新启动A/D转换
+ 207   1      }       
+ 208          
+ 209          //串口初始化函数
+ 210          void Uart_Init()
+ 211          {
+ 212   1              SCON = 0x5a; 
+ 213   1              T2L = 0xE0;             //设定定时初值
+ 214   1              T2H = 0xFE;             //设定定时初值9600
+ 215   1              AUXR = 0x14; 
+ 216   1              AUXR |= 0x01;   
+ 217   1              EA=1;
+ 218   1              ES=1;   
+ 219   1      }
+ 220          
+ 221          void SendData(uchar dat)
+ 222          {
+ 223   1              while (!TI); 
+ 224   1              TI = 0; 
+ 225   1              SBUF = dat;
+ 226   1      }
+ 227          
+ 228          void    receiveData()
+ 229          {
+ 230   1              if (RI){
+ 231   2              RI = 0; //clear
+ 232   2              age=SBUF;
+ 233   2              //SendData(age); 
+ 234   2              }
+ 235   1      }
+ 236          
+ 237          void InitTimer0(void)
+ 238          {
+ 239   1          TMOD = 0x01;
+ 240   1          TH0 = 0x00;
+ 241   1          TL0 = 0x00;
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 5   
+
+ 242   1          TR0 = 0;//先关闭定时器0
+ 243   1      }
+ 244          
+ 245          void    freeze()
+ 246          {
+ 247   1              bf=0;
+ 248   1              zd=0;
+ 249   1              motor_tz();
+ 250   1      }
+ 251          
+ 252          void runfw()
+ 253          {
+ 254   1              for(a=1;a<50;a++)
+ 255   1              {
+ 256   2                      bf=1;                   
+ 257   2                      motor_zc();
+ 258   2                      lcd_tp();
+ 259   2                      DelayMS(10);
+ 260   2              }
+ 261   1              freeze();
+ 262   1      }
+ 263                  
+ 264          
+ 265          /********************读值函数***********************/
+ 266          unsigned int Read_value()
+ 267          {
+ 268   1              float temp;
+ 269   1              unsigned int result;
+ 270   1              tr=1;//触发引脚发出11us的触发信号（至少10us）
+ 271   1              Delay1ms();
+ 272   1              _nop_();
+ 273   1              tr=0;
+ 274   1              while(!ec);//度过回响信号的低电平
+ 275   1              TR0=1;//开启定时器0
+ 276   1              while(ec);//度过回响信号高电平
+ 277   1              TR0=0;//关闭定时器0
+ 278   1              ADC_init();
+ 279   1              //SendData(0xff);
+ 280   1              //SendData(0xff);
+ 281   1              //SendData(TH0);
+ 282   1              distance=TH0;
+ 283   1              //SendData(0xff);
+ 284   1              temp=TH0*256+TL0;
+ 285   1              temp/=1000.0;
+ 286   1              temp*=17.0;
+ 287   1              result=temp;
+ 288   1              if(temp-result>=0.5)
+ 289   1              {
+ 290   2                      result+=1;
+ 291   2              }
+ 292   1              //SendData(result);
+ 293   1              return result;                  
+ 294   1      }
+ 295          
+ 296          void    rbark()
+ 297          {
+ 298   1              r=rand()%10;
+ 299   1              if(r==0)
+ 300   1              {
+ 301   2                      for(i=1;i<20;i++)  
+ 302   2                      {       
+ 303   3                              bf=1;
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 6   
+
+ 304   3                              
+ 305   3                              //SendData(1);
+ 306   3                              DelayMS(50);                    
+ 307   3                      }
+ 308   2      
+ 309   2                      //SendData(r);
+ 310   2              }
+ 311   1              else
+ 312   1                      bf=0;
+ 313   1      }
+ 314          void duobi()
+ 315          {       //SendData(distance); 
+ 316   1              if(distance<20)
+ 317   1              {
+ 318   2                      for(i=1;i<50;i++)  
+ 319   2                      {       
+ 320   3                              motor_zz();
+ 321   3                              DelayMS(10);                    
+ 322   3                      }
+ 323   2                      for(a=1;a<50;a++)  
+ 324   2                      {
+ 325   3                              motor_zc();
+ 326   3                              DelayMS(10);
+ 327   3                      }                 
+ 328   2              }
+ 329   1              else
+ 330   1                      motor_tz();
+ 331   1              
+ 332   1      }
+ 333          
+ 334          void    motor_sj()
+ 335          {
+ 336   1              uint    sj;
+ 337   1              sj=rand()%10;
+ 338   1              
+ 339   1              if(sj==0)
+ 340   1              {
+ 341   2                      for(i=1;i<50;i++)  
+ 342   2                      {       
+ 343   3                              zd=1;
+ 344   3                              
+ 345   3                              //SendData(1);
+ 346   3                              DelayMS(1);                     
+ 347   3                      }               
+ 348   2              }
+ 349   1              else
+ 350   1                      freeze();
+ 351   1                      
+ 352   1      }               
+ 353          void    zdfw()
+ 354          {
+ 355   1              for(i=1;i<50;i++)  
+ 356   1                      {       
+ 357   2                              zd=1;
+ 358   2                              
+ 359   2                              //SendData(1);
+ 360   2                              DelayMS(5);                     
+ 361   2                      }
+ 362   1              zd=0;
+ 363   1      }
+ 364          
+ 365          void    main_initial()
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 7   
+
+ 366          {
+ 367   1              SYS_Init();                         // 系统初始化
+ 368   1              DelayMS(5);
+ 369   1              lcd_init();                         // 显示驱动初始化
+ 370   1              DelayMS(5);
+ 371   1              Uart_Init();
+ 372   1          ADC_init();
+ 373   1              lcd_cs;
+*** WARNING C275 IN LINE 373 OF main.c: expression with possibly no effect
+ 374   1              timer1_initial();
+ 375   1      }
+ 376          
+ 377          void main()
+ 378          {
+ 379   1              main_initial();
+ 380   1              while(1)
+ 381   1              {
+ 382   2                      receiveData();// 查询法接收串口信息
+ 383   2                      //unsigned int distance;
+ 384   2                      tr=0;//出发引脚首先拉低
+ 385   2                      InitTimer0();//初始化定时器0
+ 386   2                      distance=Read_value();//读值
+ 387   2                      //SendData(distance); 
+ 388   2                      //test
+ 389   2                      //adc_temp=ADC_RES<<2;
+ 390   2                      //adc_temp=adc_temp+ADC_LOW2;
+ 391   2                      //SendData(0);
+ 392   2                      //SendData(0);
+ 393   2                      //SendData(ADC_RES);                                    // 发送给串口
+ 394   2                      //SendData(0);
+ 395   2                                       
+ 396   2                      switch(ADC_RES)
+ 397   2                      {
+ 398   3                      case  1:
+ 399   3                              SendData(1);
+ 400   3                              if(age==2)
+ 401   3                              {
+ 402   4                                      runfw();
+ 403   4                              }
+ 404   3                              if(age==3)
+ 405   3                              {
+ 406   4                                      lcd_tp();
+ 407   4                                      zdfw();
+ 408   4                              }       
+ 409   3                              break;                  
+ 410   3                      case 2:
+ 411   3                              if(age==1)
+ 412   3                              {
+ 413   4                                      duobi();
+ 414   4                                      rbark();                
+ 415   4                                      lcd_tp();
+ 416   4                              }
+ 417   3                              if(age==2)
+ 418   3                              {
+ 419   4                                      motor_sj();
+ 420   4                                      lcd_kx();
+ 421   4                              }
+ 422   3                              if(age==3)
+ 423   3                              {
+ 424   4                                      lcd_kx();
+ 425   4                              }
+ 426   3                              if(age==4)
+C51 COMPILER V9.57.0.0   MAIN                                                              11/23/2020 17:40:19 PAGE 8   
+
+ 427   3                              {       
+ 428   4                                      lcd_clear();                        // 清屏
+ 429   4                                      DelayMS(5);
+ 430   4                              }                                       
+ 431   3                              break;
+ 432   3                      default:
+ 433   3                              //SendData(4);
+ 434   3                              freeze();               
+ 435   3                      }
+ 436   2                                                                                              
+ 437   2              } 
+ 438   1      }
+ 439          
+ 440          void timer1() interrupt 3 /* T1中断服务程序 */  
+ 441          {  
+ 442   1      if(t==0) /* 1个PWM周期完成后才会接受新数值 */  
+ 443   1      {  
+ 444   2        tmp1=m1;  
+ 445   2        tmp2=m2;  
+ 446   2      }  
+ 447   1      if(t<tmp1) en1=1; else en1=0; /* 产生电机1的PWM信号 */  
+ 448   1      if(t<tmp2) en2=1; else en2=0; /* 产生电机2的PWM信号 */  
+ 449   1      t++;  
+ 450   1      if(t>=100) t=0; /* 1个PWM信号由100次中断产生 */  
+ 451   1      }  
+ 452          
+ 453          
+ 454          
+ 455          
+ 456          
+ 457          
+ 458          
+ 459          
+ 460          
+ 461          
+ 462          
+ 463          
+ 464          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    969    ----
+   CONSTANT SIZE    =     76    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     14       9
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

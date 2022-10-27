@@ -1,0 +1,76 @@
+C51 COMPILER V9.57.0.0   DELAY                                                             11/21/2020 19:44:50 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE DELAY
+OBJECT MODULE PLACED IN delay.OBJ
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE delay.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          /************************************************************************************
+   2          
+   3          程序名称：延时函数(晶振频率12MHz)
+   4          功能说明: 延时毫秒与微秒
+   5          
+   6          ************************************************************************************/
+   7          
+   8          #include "stc15f2k60s2.h"           // 单片机STC15F2K60S2头文件,可以不再加入reg51.h
+   9          #include <intrins.h>                        // 加入此头文件后,可使用_nop_库函数
+  10          #include <stdio.h>
+  11          
+  12          
+  13          
+  14          void Delay1us()         //@18.432MHz
+  15          {
+  16   1              _nop_();
+  17   1              _nop_();
+  18   1              _nop_();
+  19   1              _nop_();
+  20   1      }
+  21          
+  22          void Delay1ms()         //@18.432MHz
+  23          {
+  24   1              unsigned char i, j;
+  25   1      
+  26   1              i = 12;
+  27   1              j = 169;
+  28   1              do
+  29   1              {
+  30   2                      while (--j);
+  31   2              } while (--i);
+  32   1      }
+  33          
+  34          void DelayMS(int t)
+  35          {
+  36   1              while(t--)
+  37   1              {
+  38   2                      Delay1ms();
+  39   2              }
+  40   1      }
+  41          
+  42          void DelayUS(int t)
+  43          {
+  44   1              while(t--)
+  45   1              {
+  46   2                      Delay1us();
+  47   2              }
+  48   1      }
+  49          
+  50          
+  51          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     50    ----
+C51 COMPILER V9.57.0.0   DELAY                                                             11/21/2020 19:44:50 PAGE 2   
+
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
